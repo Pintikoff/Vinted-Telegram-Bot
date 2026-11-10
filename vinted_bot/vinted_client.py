@@ -1,6 +1,15 @@
+import asyncio
+import json
 from dataclasses import dataclass
 
 import httpx
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+RETRY_DELAY_SECONDS = 1
 
 
 class VintedClientError(Exception):
@@ -25,7 +34,8 @@ class VintedClient:
 
     async def search(self, search_text: str, per_page: int = 96) -> list[VintedItem]:
         last_error: Exception | None = None
-        for _ in range(3):
+        attempts = 3
+        for attempt in range(attempts):
             try:
                 await self._ensure_session()
                 response = await self._http_client.get(
@@ -35,6 +45,7 @@ class VintedClient:
                         "order": "newest_first",
                         "per_page": per_page,
                     },
+                    headers={"User-Agent": USER_AGENT},
                 )
                 if response.status_code in (401, 403):
                     last_error = httpx.HTTPStatusError(
@@ -44,11 +55,16 @@ class VintedClient:
                     )
                     self._session_ready = False
                     await self._ensure_session()
+                    if attempt < attempts - 1:
+                        await asyncio.sleep(RETRY_DELAY_SECONDS)
                     continue
                 response.raise_for_status()
                 return self._parse_items(response.json())
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 last_error = exc
+
+            if attempt < attempts - 1:
+                await asyncio.sleep(RETRY_DELAY_SECONDS)
 
         raise VintedClientError(
             f"Failed to search Vinted for '{search_text}' after 3 attempts"
@@ -57,7 +73,9 @@ class VintedClient:
     async def _ensure_session(self) -> None:
         if self._session_ready:
             return
-        response = await self._http_client.get(f"https://www.{self._domain}/")
+        response = await self._http_client.get(
+            f"https://www.{self._domain}/", headers={"User-Agent": USER_AGENT}
+        )
         response.raise_for_status()
         self._session_ready = True
 

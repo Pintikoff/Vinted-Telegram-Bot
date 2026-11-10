@@ -45,6 +45,7 @@ async def run_check_cycle(
         any_model_succeeded = True
         prices = [item.price for item in items]
         all_ids = [item.item_id for item in items]
+        failed_send_ids: set[str] = set()
 
         unseen_ids = set(await db.filter_unseen_item_ids(db_path, all_ids))
         for item in items:
@@ -55,9 +56,21 @@ async def run_check_cycle(
                 text = format_deal_message(
                     model.search_text, item, result.median_price, result.sample_size
                 )
-                await send_deal_alert(bot, owner_chat_id, text, item.photo_url)
+                try:
+                    await send_deal_alert(bot, owner_chat_id, text, item.photo_url)
+                except Exception:
+                    logger.exception(
+                        "Failed to send deal alert for item %s (model %s); "
+                        "will retry next cycle",
+                        item.item_id,
+                        model.search_text,
+                    )
+                    failed_send_ids.add(item.item_id)
 
-        await db.mark_items_seen(db_path, model.id, all_ids)
+        ids_to_mark_seen = [
+            item_id for item_id in all_ids if item_id not in failed_send_ids
+        ]
+        await db.mark_items_seen(db_path, model.id, ids_to_mark_seen)
 
     if any_model_succeeded or not models:
         state.last_success_at = datetime.now(timezone.utc).isoformat()
@@ -85,5 +98,8 @@ async def run_forever(
     state: SchedulerState,
 ) -> None:
     while True:
-        await run_check_cycle(db_path, vinted_client, bot, owner_chat_id, state)
+        try:
+            await run_check_cycle(db_path, vinted_client, bot, owner_chat_id, state)
+        except Exception:
+            logger.exception("Unhandled error during check cycle; continuing")
         await asyncio.sleep(interval_seconds)
