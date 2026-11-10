@@ -25,22 +25,22 @@ def build_application(token: str, owner_id: int, db_path: str) -> Application:
     @owner_only(owner_id)
     async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await commands.add_model_command(db_path, context.args)
-        await update.message.reply_text(reply)
+        await update.effective_message.reply_text(reply)
 
     @owner_only(owner_id)
     async def handle_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await commands.remove_model_command(db_path, context.args)
-        await update.message.reply_text(reply)
+        await update.effective_message.reply_text(reply)
 
     @owner_only(owner_id)
     async def handle_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await commands.list_models_command(db_path)
-        await update.message.reply_text(reply)
+        await update.effective_message.reply_text(reply)
 
     @owner_only(owner_id)
     async def handle_threshold(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await commands.threshold_command(db_path, context.args)
-        await update.message.reply_text(reply)
+        await update.effective_message.reply_text(reply)
 
     @owner_only(owner_id)
     async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,7 +48,7 @@ def build_application(token: str, owner_id: int, db_path: str) -> Application:
         last_success_at = state.last_success_at if state else None
         consecutive_failures = state.consecutive_failure_cycles if state else 0
         reply = await commands.status_command(db_path, last_success_at, consecutive_failures)
-        await update.message.reply_text(reply)
+        await update.effective_message.reply_text(reply)
 
     application.add_handler(CommandHandler("add", handle_add))
     application.add_handler(CommandHandler("remove", handle_remove))
