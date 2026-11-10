@@ -97,3 +97,33 @@ async def test_search_reauthenticates_on_403(http_client):
 
     assert items == []
     assert bootstrap_route.call_count == 2
+
+
+@respx.mock
+async def test_search_wraps_initial_bootstrap_failure(http_client):
+    respx.get("https://www.vinted.de/").mock(return_value=httpx.Response(500))
+    catalog_route = respx.get("https://www.vinted.de/api/v2/catalog/items")
+
+    client = VintedClient("vinted.de", http_client)
+
+    with pytest.raises(VintedClientError) as exc_info:
+        await client.search("carhartt detroit jacket")
+
+    assert isinstance(exc_info.value.__cause__, httpx.HTTPError)
+    assert not catalog_route.called
+
+
+@respx.mock
+async def test_search_raises_with_cause_after_repeated_403(http_client):
+    respx.get("https://www.vinted.de/").mock(return_value=httpx.Response(200))
+    respx.get("https://www.vinted.de/api/v2/catalog/items").mock(
+        return_value=httpx.Response(403)
+    )
+
+    client = VintedClient("vinted.de", http_client)
+
+    with pytest.raises(VintedClientError) as exc_info:
+        await client.search("carhartt detroit jacket")
+
+    assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+    assert exc_info.value.__cause__.response.status_code == 403

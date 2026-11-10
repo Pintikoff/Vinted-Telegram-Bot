@@ -24,11 +24,10 @@ class VintedClient:
         self._session_ready = False
 
     async def search(self, search_text: str, per_page: int = 96) -> list[VintedItem]:
-        await self._ensure_session()
-
         last_error: Exception | None = None
         for _ in range(3):
             try:
+                await self._ensure_session()
                 response = await self._http_client.get(
                     f"https://www.{self._domain}/api/v2/catalog/items",
                     params={
@@ -38,6 +37,11 @@ class VintedClient:
                     },
                 )
                 if response.status_code in (401, 403):
+                    last_error = httpx.HTTPStatusError(
+                        f"Vinted returned {response.status_code} for catalog request",
+                        request=response.request,
+                        response=response,
+                    )
                     self._session_ready = False
                     await self._ensure_session()
                     continue
